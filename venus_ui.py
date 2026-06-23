@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 from google import genai 
 import json
+import urllib.parse
 # ==========================================
 # ૧. પેજનું સેટિંગ
 # ==========================================
@@ -66,11 +67,15 @@ if st.sidebar.button("સ્ટોક અપડેટ કરો"):
             st.sidebar.error("આ નામની પ્રોડક્ટ ગૂગલ શીટમાં મળી નથી. સ્પેલિંગ ચેક કરો.")
 
 # ==========================================
-# ૫. ગ્રાહકનો મેસેજ અને AI નું સેટિંગ
+# ૫. ગ્રાહકનો મેસેજ, AI અને WhatsApp ઓટોમેશન 🟢
 # ==========================================
 my_api_key = st.secrets["GEMINI_API_KEY"]
 
 customer_message = st.text_area("ગ્રાહકનો મેસેજ અહી પેસ્ટ કરો:", placeholder="ઉદાહરણ: મારે તાત્કાલિક 500 Surgical Gown જોઈએ છે...")
+
+# 5.1 પાયથોનની 'પર્સનલ ડાયરી' માં જવાબ સાચવવાનું સેટિંગ
+if "ai_reply" not in st.session_state:
+    st.session_state.ai_reply = ""
 
 if st.button("🤖 AI પાસે જવાબ લખાવો", type="primary"):
     if customer_message == "":
@@ -90,9 +95,41 @@ if st.button("🤖 AI પાસે જવાબ લખાવો", type="primary"
                     model='gemini-2.5-flash',
                     contents=prompt,
                 )
-                st.success("✅ જવાબ તૈયાર છે!")
-                st.write("==================================================")
-                st.write(response.text)
-                st.write("==================================================")
+                # AI ના જવાબને ડાયરીમાં કાયમ માટે સેવ કરી લીધો!
+                st.session_state.ai_reply = response.text 
             except Exception as e:
                 st.error(f"કંઈક ભૂલ થઈ: {e}")
+
+# 5.2 જો ડાયરીમાં જવાબ સેવ થઈ ગયો હોય, તો જ નીચેનો WhatsApp વાળો ભાગ દેખાશે
+if st.session_state.ai_reply != "":
+    st.success("✅ જવાબ તૈયાર છે!")
+    st.write("==================================================")
+    st.write(st.session_state.ai_reply)
+    st.write("==================================================")
+    
+    st.markdown("### 🟢 આ જવાબ સીધો WhatsApp પર મોકલો")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        phone_number = st.text_input("ગ્રાહકનો 10 આંકડાનો WhatsApp નંબર લખો:", placeholder="9876543210")
+        
+    with col2:
+        st.write("") # બટનને ટેક્સ્ટ બોક્સની લાઈનમાં નીચે લાવવા માટે ખાલી જગ્યા
+        st.write("")
+        
+        # જો નંબર 10 આંકડાનો લખાઈ જાય, તો જ અસલી લિંકવાળું બટન ચાલુ થશે
+        if phone_number != "" and len(phone_number.strip()) >= 10:
+            clean_num = phone_number.strip()
+            if len(clean_num) == 10:
+                clean_num = "91" + clean_num # ભારતનો કોડ +91 જાતે લગાવી દેશે
+                
+            # ગુજરાતી લખાણને ઇન્ટરનેટની ભાષામાં (URL Encoded) ફેરવ્યું
+            encoded_msg = urllib.parse.quote(st.session_state.ai_reply)
+            whatsapp_link = f"https://wa.me/{clean_num}?text={encoded_msg}"
+            
+            # આ જાદુઈ બટન દબાવતા જ નવું ટેબ ખૂલશે
+            st.link_button("💬 WhatsApp ઓપન કરો", whatsapp_link, type="primary")
+        else:
+            # જ્યાં સુધી સાચો નંબર નહિ લખાય, ત્યાં સુધી બટન 'Lock' રહેશે
+            st.button("💬 WhatsApp ઓપન કરો", disabled=True, key="lock_btn")
